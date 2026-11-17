@@ -1,14 +1,3 @@
-"""Consumidor de lecturas de temperatura.
-
-Lo invoca el event source mapping de SQS con un lote de hasta 10 mensajes.
-Cada mensaje es {"sensor_id": str, "timestamp": int (ms), "temperature": number}.
-
-Por cada lote:
-  1. Valida y guarda cada lectura en DynamoDB (con expires_at para el TTL).
-  2. Si alguna supera el umbral, publica UN solo aviso en SNS con todas las del lote.
-  3. Devuelve en batchItemFailures los mensajes que fallaron: SQS reintenta solo esos
-     y, tras maxReceiveCount recepciones, los manda a la DLQ.
-"""
 import json
 import logging
 import math
@@ -43,7 +32,6 @@ def parse_reading(body):
 
     if not isinstance(sensor_id, str) or not sensor_id:
         raise ValueError("sensor_id ausente o no es texto")
-    # bool es subclase de int en Python: se excluye a propósito.
     if isinstance(timestamp, bool) or not isinstance(timestamp, int) or timestamp <= 0:
         raise ValueError("timestamp ausente o no es un entero positivo (ms)")
     if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
