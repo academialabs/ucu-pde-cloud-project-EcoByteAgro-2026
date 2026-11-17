@@ -1,0 +1,62 @@
+@startuml arquitectura-aws
+!include <awslib14/AWSCommon>
+!include <awslib14/ApplicationIntegration/SimpleQueueService>
+!include <awslib14/ApplicationIntegration/SimpleNotificationService>
+!include <awslib14/Compute/Lambda>
+!include <awslib14/Database/DynamoDB>
+!include <awslib14/ManagementGovernance/CloudWatch>
+!include <awslib14/Storage/SimpleStorageService>
+
+title EcoByte Agro: arquitectura en AWS (us-east-1)
+skinparam shadowing false
+
+actor "Operador" as op
+actor "Equipo\n(email)" as mail
+rectangle "GitHub Actions\nci / deploy / destroy" as gh
+
+rectangle "Laptop" {
+  rectangle "simulator.py (boto3)\nidentidad: solo sqs:SendMessage" as sim
+}
+
+rectangle "Cuenta AWS" {
+  rectangle "Región us-east-1" {
+    rectangle "Ingesta" {
+      SimpleQueueService(q, "ecobyte-dev-ingesta", "SQS estándar")
+      SimpleQueueService(dlq, "DLQ", "maxReceiveCount = 3")
+    }
+    rectangle "Procesamiento" {
+      rectangle "Event source mapping\nlotes de 10, max_concurrency" as esm
+      Lambda(fn, "ecobyte-dev-consumidor", "Python, rol propio")
+    }
+    rectangle "Datos" {
+      DynamoDB(db, "ecobyte-dev-lecturas", "on-demand, TTL expires_at")
+    }
+    rectangle "Notificación" {
+      SimpleNotificationService(sns, "Tópico de alertas", "suscripción email")
+    }
+    rectangle "Observabilidad" {
+      CloudWatch(cw, "Dashboard + alarma DLQ", "Logs 7 días")
+    }
+    rectangle "Identidad y secretos" {
+      rectangle "IAM: OIDC provider\nroles plan y deploy" as iam
+      rectangle "SSM Parameter Store\n/ecobyte/alert-emails" as ssm
+    }
+  }
+  SimpleStorageService(s3, "Estado de OpenTofu", "tfstate con lockfile")
+}
+
+op --> sim
+sim --> q : 1. SendMessage
+esm --> q : 2. polling
+esm --> fn : 3. Invoke (lote)
+fn --> db : 4. PutItem
+fn --> sns : 5. si temp > 35 °C
+sns --> mail : 6. email
+q --> dlq : redrive
+cw --> dlq : alarma
+cw --> sns
+gh --> iam : OIDC
+gh --> s3
+iam ..> ssm : lee los correos\n(ssm:GetParameter, solo ese ARN)
+iam ..> sns : OpenTofu crea las\nsuscripciones de email
+@enduml
