@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import os
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import boto3
@@ -56,9 +57,15 @@ def save_reading(sensor_id, timestamp, temperature):
     )
 
 
+def format_ts(timestamp_ms):
+    """Epoch en milisegundos -> '2026-11-18 14:32:07 UTC' (legible en el email)."""
+    dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 def publish_alert(hot):
     """Un solo email por lote, con todas las lecturas sobre el umbral."""
-    lines = [f"- {sid}: {temp:.1f} °C (timestamp {ts})" for sid, ts, temp, _ in hot]
+    lines = [f"- {sid}: {temp:.1f} °C ({format_ts(ts)})" for sid, ts, temp, _ in hot]
     sns.publish(
         TopicArn=TOPIC_ARN,
         Subject=f"EcoByte: {len(hot)} lectura(s) sobre {ALERT_THRESHOLD:g} °C"[:100],
