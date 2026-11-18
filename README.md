@@ -33,7 +33,51 @@ simulador (laptop) -> SQS ingesta -> Lambda (lotes de 10) -> DynamoDB (TTL 30 d�
 | Secretos | SSM Parameter Store | `/ecobyte/alert-emails`, `/ecobyte/budget-emails` |
 | Estado de OpenTofu | S3 con bloqueo | `ecobyte-agro-tfstate-<cuenta>` |
 
-Más diagramas (C4 de contexto, componentes, despliegue y flujos) en [`docs/diagramas/`](docs/diagramas/).
+## Diagramas
+
+Los diagramas están en [`docs/diagramas/`](docs/diagramas/), con su fuente en PlantUML (`.puml`) al lado de cada imagen.
+
+### Contexto (C4 nivel 1)
+
+Quién usa el sistema y qué intercambia con él: el equipo lanza la simulación, los sensores publican lecturas, los usuarios reciben las alertas y el equipo ve métricas y avisos de fallos.
+
+![Contexto del sistema](docs/diagramas/c4-contexto.png)
+
+### Arquitectura lógica (independiente del proveedor)
+
+El mismo diseño con componentes genéricos: cola, función, base NoSQL, tópico, monitoreo, secretos e identidades. Se puede implementar en AWS, Google Cloud o Azure; ver las equivalencias en [`docs/provider-aws.md`](docs/provider-aws.md).
+
+![Arquitectura agnóstica](docs/diagramas/arquitectura-agnostica.png)
+
+### Despliegue (C4 deployment)
+
+Dónde corre cada parte: el simulador en la laptop, el pipeline en GitHub Actions y el resto en la cuenta de AWS (`us-east-1`), con los nombres reales de los recursos.
+
+![Despliegue](docs/diagramas/c4-despliegue.png)
+
+### Componentes de la función (C4 nivel 3)
+
+Cómo está armado `handler.py`: `parse_reading` valida, `save_reading` guarda con TTL, `publish_alert` manda un aviso por lote y `handler` coordina y arma la lista de fallidos.
+
+![Componentes de la Lambda](docs/diagramas/c4-componentes-lambda.png)
+
+### Flujo normal de una lectura (C4 dinámico)
+
+Del simulador a la cola, de la cola a la función, y de ahí a la tabla y, si pasa de 35 °C, al email.
+
+![Flujo normal](docs/diagramas/c4-dinamico-normal.png)
+
+### Flujo de fallo (C4 dinámico)
+
+Un mensaje que falla se reintenta. A la tercera recepción pasa a la DLQ, la alarma lo detecta y avisa por email.
+
+![Flujo de fallo](docs/diagramas/c4-dinamico-fallo.png)
+
+## Prueba de carga
+
+Con cuatro simuladores en paralelo (40.000 lecturas a unos 222 por segundo), la cola llegó a 21.100 mensajes y se vació unos 5 minutos después de terminar el envío, sin errores ni mensajes en la DLQ. El consumidor procesó unos 84 mensajes por segundo con `max_concurrency = 5`. Los detalles y la proyección a 10x y 100x están en [`docs/escalabilidad.md`](docs/escalabilidad.md).
+
+![Mensajes esperando en la cola durante la prueba con cuatro simuladores](docs/assets/IngestaMsgEsperando4sims.jpg)
 
 ## Estructura del repo
 
