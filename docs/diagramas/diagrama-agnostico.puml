@@ -1,0 +1,64 @@
+@startuml arquitectura-agnostica
+!include <C4/C4_Container>
+LAYOUT_TOP_DOWN()
+title EcoByte Agro: arquitectura lógica (agnóstica al proveedor)
+
+Person(op, "Equipo", "Lanzamos la simulación de sensores")
+Person(dest, "Usuarios", "Reciben alertas por email")
+System_Ext(ci, "CI/CD", "Plan, apply y destroy con identidad federada (sin claves)")
+
+System_Boundary(local, "Entorno local") {
+  Container(sim, "Simulador de sensores", "Python", "Genera lecturas {sensor_id, timestamp, temperature}")
+}
+
+System_Boundary(cloud, "Plataforma cloud: un solo entorno, una sola región") {
+
+  Boundary(ing, "Capa de ingesta (desacople productor/consumidor)") {
+    ContainerQueue(q, "Cola de ingesta", "Mensajería, entrega al menos una vez", "Absorbe picos de carga")
+    ContainerQueue(dlq, "Cola de mensajes fallidos", "DLQ", "Recibe el mensaje tras N intentos")
+  }
+
+  Boundary(proc, "Capa de procesamiento (sin servidores)") {
+    Container(poller, "Poller / disparador", "Servicio gestionado", "Sondea la cola, arma lotes de 10, invoca la función")
+    Container(fn, "Función consumidora", "Serverless, concurrencia acotada", "Valida, guarda y evalúa umbral de 35 °C")
+  }
+
+  Boundary(data, "Capa de datos") {
+    ContainerDb(db, "Base NoSQL", "Clave sensor+timestamp, TTL 30 días", "Lecturas")
+  }
+
+  Boundary(notif, "Capa de notificación") {
+    Container(topic, "Tópico pub/sub", "Notificaciones", "Alertas de temperatura y de operación")
+  }
+
+  Boundary(obs, "Capa de observabilidad") {
+    Container(mon, "Monitoreo", "Dashboard, alarma y logs (7 días)", "Cola, invocaciones, errores, DLQ")
+  }
+
+  Boundary(sec, "Capa de identidad y secretos") {
+    Container(iam, "Identidades de menor privilegio", "3 identidades", "Función, despliegue, simulador")
+    Container(secrets, "Almacén de secretos", "Parámetro cifrado", "Correos de alerta, fuera del repo")
+  }
+}
+
+Rel(op, sim, "Ejecuta")
+Rel(sim, q, "Publica lecturas")
+Rel(poller, q, "Sondea y borra al éxito")
+Rel(poller, fn, "Invoca (síncrono) con el lote")
+Rel(fn, db, "Guarda")
+Rel(fn, topic, "Publica si temp > 35 °C")
+Rel(topic, dest, "Email")
+Rel(q, dlq, "Redrive tras N recepciones")
+Rel(mon, dlq, "Alarma si hay mensajes")
+Rel(mon, topic, "Notifica alarma")
+Rel(ci, iam, "Asume rol federado")
+Rel(iam, secrets, "Lee los correos al desplegar")
+Rel(iam, topic, "Crea las suscripciones de email")
+
+ SHOW_LEGEND()
+  note as N
+    "Container" es la terminología de C4: una unidad desplegable por separado.
+     No implica Docker ni ningún tipo de contenedor.
+  end note
+
+@enduml

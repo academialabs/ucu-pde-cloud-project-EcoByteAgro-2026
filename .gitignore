@@ -21,3 +21,7 @@ __pycache__/
 *.zip
 
 .claude
+
+out 
+# Metadatos de Windows al copiar archivos en WSL
+*:Zone.Identifier
