@@ -27,3 +27,8 @@ output "alerts_topic_arn" {
   description = "ARN del tópico SNS de alertas"
   value       = aws_sns_topic.alerts.arn
 }
+
+output "simulator_role_arn" {
+  description = "ARN del rol del simulador (solo sqs:SendMessage sobre la cola de ingesta)"
+  value       = aws_iam_role.simulator.arn
+}
