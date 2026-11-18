@@ -1,3 +1,4 @@
+# Lambda: valida las lecturas de SQS, las guarda en DynamoDB y avisa por SNS si pasan de 35 °C.
 import json
 import logging
 import math
@@ -11,18 +12,16 @@ TABLE_NAME = os.environ["TABLE_NAME"]
 TOPIC_ARN = os.environ["TOPIC_ARN"]
 ALERT_THRESHOLD = float(os.environ["ALERT_THRESHOLD"])
 TTL_ATTRIBUTE = os.environ.get("TTL_ATTRIBUTE", "expires_at")
-TTL_SECONDS = 30 * 24 * 60 * 60  # 30 días
+TTL_SECONDS = 30 * 24 * 60 * 60
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Fuera del handler: se crean una vez por entorno de ejecución y se reusan entre invocaciones.
 sns = boto3.client("sns")
 table = boto3.resource("dynamodb").Table(TABLE_NAME)
 
 
 def parse_reading(body):
-    """Devuelve (sensor_id, timestamp_ms, temperature) o lanza ValueError si el mensaje es inválido."""
     data = json.loads(body)
     if not isinstance(data, dict):
         raise ValueError("el cuerpo no es un objeto JSON")
@@ -44,27 +43,22 @@ def parse_reading(body):
 
 
 def save_reading(sensor_id, timestamp, temperature):
-    """Guarda la lectura. La clave (sensor_id, timestamp) hace que reintentar sea idempotente."""
     table.put_item(
         Item={
             "sensor_id": sensor_id,
             "timestamp": timestamp,
-            # DynamoDB no acepta float: se pasa por str para no arrastrar error binario.
             "temperature": Decimal(str(temperature)),
-            # Epoch en segundos, que es lo que espera el TTL de DynamoDB.
             TTL_ATTRIBUTE: timestamp // 1000 + TTL_SECONDS,
         }
     )
 
 
 def format_ts(timestamp_ms):
-    """Epoch en milisegundos -> '2026-11-18 14:32:07 UTC' (legible en el email)."""
     dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def publish_alert(hot):
-    """Un solo email por lote, con todas las lecturas sobre el umbral."""
     lines = [f"- {sid}: {temp:.1f} °C ({format_ts(ts)})" for sid, ts, temp, _ in hot]
     sns.publish(
         TopicArn=TOPIC_ARN,
@@ -75,15 +69,13 @@ def publish_alert(hot):
 
 def handler(event, context):
     failures = []
-    hot = []  # (sensor_id, timestamp, temperature, message_id)
+    hot = []
 
     for record in event["Records"]:
         message_id = record["messageId"]
         try:
             sensor_id, timestamp, temperature = parse_reading(record["body"])
         except (ValueError, json.JSONDecodeError) as exc:
-            # Mensaje inválido: reintentar no lo arregla, pero se reporta para que llegue a la DLQ
-            # y la alarma avise. El motivo no viaja a la DLQ, por eso se loguea acá.
             logger.error("mensaje inválido messageId=%s motivo=%s", message_id, exc)
             failures.append({"itemIdentifier": message_id})
             continue
@@ -102,8 +94,6 @@ def handler(event, context):
         try:
             publish_alert(hot)
         except Exception:
-            # Ya están guardadas: el reintento las vuelve a escribir igual (misma clave) y
-            # reintenta el aviso. Se reportan solo las lecturas calientes.
             logger.exception("no se pudo publicar la alerta (%d lecturas)", len(hot))
             for sensor_id, _, _, message_id in hot:
                 logger.error("alerta fallida messageId=%s sensor_id=%s", message_id, sensor_id)

@@ -1,3 +1,4 @@
+# Salidas del módulo consumer.
 output "function_name" {
   description = "Nombre de la Lambda consumidora, para las métricas y alarmas de CloudWatch"
   value       = aws_lambda_function.consumer.function_name

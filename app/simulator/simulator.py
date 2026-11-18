@@ -1,14 +1,4 @@
-"""Simulador de sensores de temperatura de EcoByte Agro.
-
-Publica lecturas en la cola de ingesta (SQS) a un ritmo fijo de mensajes por segundo.
-Cada mensaje es un JSON con el formato que espera la Lambda consumidora:
-
-    {"sensor_id": "sensor-0007", "timestamp": 1793540000000, "temperature": 24.3}
-
-La URL de la cola no va en el código: se pasa con --queue-url o con la variable QUEUE_URL
-(sale de `tofu output -raw ingest_queue_url`).
-"""
-
+# Simulador: manda lecturas de temperatura a la cola de SQS (URL por --queue-url o QUEUE_URL).
 import argparse
 import json
 import os
@@ -18,7 +8,6 @@ import time
 
 import boto3
 
-# SQS acepta hasta 10 mensajes por llamada; enviar en lotes reduce llamadas y costo.
 SQS_BATCH_MAX = 10
 ALERT_THRESHOLD = 35.0
 
@@ -48,15 +37,12 @@ def parse_args():
 
 
 def make_reading(sensors, hot_ratio, last_ts):
-    """Una lectura: temperatura normal de campo o, con probabilidad hot_ratio, una de alerta."""
     if random.random() < hot_ratio:
         temperature = random.uniform(ALERT_THRESHOLD + 0.1, 42.0)
     else:
         temperature = random.uniform(12.0, 32.0)
 
     sensor_id = f"sensor-{random.randint(1, sensors):04d}"
-    # La tabla usa sensor_id + timestamp como clave: si un sensor repitiera el milisegundo,
-    # la segunda lectura pisaría a la primera. Se corre 1 ms para que no se pierdan datos.
     timestamp = max(time.time_ns() // 1_000_000, last_ts.get(sensor_id, 0) + 1)
     last_ts[sensor_id] = timestamp
 
@@ -64,7 +50,6 @@ def make_reading(sensors, hot_ratio, last_ts):
 
 
 def send_batch(sqs, queue_url, readings):
-    """Envía hasta 10 lecturas en una llamada. Devuelve cuántas fallaron."""
     entries = [{"Id": str(i), "MessageBody": json.dumps(r)} for i, r in enumerate(readings)]
     response = sqs.send_message_batch(QueueUrl=queue_url, Entries=entries)
     for failed in response.get("Failed", []):
@@ -84,7 +69,6 @@ def main():
     last_ts = {}
     start = time.monotonic()
 
-    # Cada vuelta envía los mensajes de un segundo y espera lo que falte para completarlo.
     while sent + failed < args.count:
         second_start = time.monotonic()
         to_send = min(args.rate, args.count - sent - failed)

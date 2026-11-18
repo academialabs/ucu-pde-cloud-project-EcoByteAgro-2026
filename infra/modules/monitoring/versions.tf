@@ -1,3 +1,4 @@
+# Versiones requeridas del módulo monitoring.
 terraform {
   required_version = ">= 1.12.6"
 

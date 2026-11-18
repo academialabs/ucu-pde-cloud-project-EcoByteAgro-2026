@@ -1,4 +1,4 @@
-# Los correos no van en el repo: se cargan a mano una vez en SSM (SecureString, lista JSON).
+# Entorno dev: conecta los módulos messaging, database, consumer y monitoring.
 data "aws_ssm_parameter" "alert_emails" {
   name = "/ecobyte/alert-emails"
 }
@@ -16,8 +16,6 @@ module "database" {
   name_prefix = "ecobyte-${var.env}"
 }
 
-# Lambda que consume la cola. El visibility timeout de la cola (180 s) es 6 veces el timeout
-# de la Lambda (30 s): si se cambia uno, revisar el otro.
 module "consumer" {
   source = "../../modules/consumer"
 

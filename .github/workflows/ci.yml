@@ -1,3 +1,4 @@
+# CI de cada PR: formato, validate, tflint, Trivy y el plan comentado en el PR.
 name: ci
 on:
   pull_request:
@@ -14,11 +15,11 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
-      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4
         with:
           tofu_version: 1.12.6
           tofu_wrapper: false
@@ -26,7 +27,6 @@ jobs:
       - name: Formato
         run: tofu fmt -check -recursive -diff infra
 
-      # Sin backend: validate no necesita credenciales ni estado.
       - name: Validar infra/bootstrap
         working-directory: infra/bootstrap
         run: |
@@ -39,16 +39,15 @@ jobs:
           tofu init -backend=false -input=false
           tofu validate
 
-      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337
         with:
           tflint_version: v0.65.0
 
-      # Falla con cualquier severidad: los módulos ya tienen contenido y tflint da limpio.
       - name: tflint
         run: tflint --recursive
 
       - name: Trivy (configuración de OpenTofu)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           scan-type: config
           scan-ref: infra
@@ -56,9 +55,6 @@ jobs:
           exit-code: "1"
           version: v0.76.1
 
-  # Publica en el PR lo que haría un apply. Usa el rol de solo lectura (ecobyte-github-plan),
-  # que solo acepta tokens de pull_request: un PR con un workflow modificado no puede escribir.
-  # Los valores sensibles (como los correos de las alertas) salen como "(sensitive value)".
   plan:
     needs: checks
     runs-on: ubuntu-latest
@@ -70,16 +66,16 @@ jobs:
       run:
         working-directory: infra/envs/dev
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
-      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4
         with:
           tofu_version: 1.12.6
           tofu_wrapper: false
 
-      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
           role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
           aws-region: us-east-1
@@ -87,7 +83,6 @@ jobs:
       - name: Init
         run: tofu init -input=false
 
-      # tee guarda la salida para el comentario; pipefail hace que el paso falle si el plan falla.
       - name: Plan
         id: plan
         run: |
@@ -95,9 +90,6 @@ jobs:
           tofu plan -var-file=dev.tfvars -input=false -no-color -lock-timeout=120s \
             | tee "$RUNNER_TEMP/plan.txt"
 
-      # Se comenta aunque el plan falle, para que el error se vea en el PR. Un solo comentario
-      # que se actualiza en cada push (--edit-last), en vez de uno nuevo por corrida.
-      # GitHub limita los comentarios a 65536 caracteres: se corta el plan en 60000.
       - name: Comentar el plan en el PR
         if: always() && (steps.plan.outcome == 'success' || steps.plan.outcome == 'failure')
         env:

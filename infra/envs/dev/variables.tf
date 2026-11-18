@@ -1,3 +1,4 @@
+# Variables del entorno dev, con tipo y validación.
 variable "env" {
   description = "Nombre del entorno, usado en la etiqueta env"
   type        = string

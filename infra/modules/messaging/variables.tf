@@ -1,3 +1,4 @@
+# Variables del módulo messaging.
 variable "name_prefix" {
   description = "Prefijo de los nombres de los recursos (por ejemplo ecobyte-dev). Debe empezar con ecobyte- para que los permisos por ARN del rol de despliegue lo alcancen"
   type        = string

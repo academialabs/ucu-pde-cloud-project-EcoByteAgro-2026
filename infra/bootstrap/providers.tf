@@ -1,3 +1,4 @@
+# Versiones fijadas, estado en S3 y etiquetas comunes del bootstrap.
 terraform {
   required_version = "= 1.12.6"
 

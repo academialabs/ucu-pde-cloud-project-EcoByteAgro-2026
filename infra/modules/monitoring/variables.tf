@@ -1,3 +1,4 @@
+# Variables del módulo monitoring.
 variable "name_prefix" {
   description = "Prefijo de los nombres de los recursos. Debe empezar con ecobyte- para que los permisos por ARN del rol de despliegue lo pueda utilizar"
   type        = string

@@ -1,3 +1,4 @@
+# Versiones requeridas del módulo database.
 terraform {
   required_version = ">= 1.12.6"
 
