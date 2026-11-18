@@ -1,0 +1,24 @@
+@startuml c4-dinamico-normal
+!include <C4/C4_Dynamic>
+LAYOUT_TOP_DOWN()
+title EcoByte Agro: flujo normal de una lectura, con alerta (C4 dinámico)
+
+Person(dest, "Usuarios", "Reciben el email")
+
+Container(sim, "Simulador", "Python en la laptop", "Publica lecturas en lotes de 10")
+ContainerQueue(q, "Cola de ingesta", "Mensajería", "Desacopla productor y consumidor")
+Container(poller, "Poller / disparador", "Servicio gestionado", "Sondea la cola e invoca la función")
+Container(fn, "Función consumidora", "Serverless", "Valida, guarda y avisa")
+ContainerDb(db, "Base NoSQL", "DynamoDB", "TTL de 30 días")
+Container(topic, "Tópico pub/sub", "Notificaciones", "Alertas por email")
+
+Rel(sim, q, "Publica lecturas", "{sensor_id, timestamp, temperature}")
+Rel(poller, q, "Recibe un lote de hasta 10 mensajes")
+Rel(poller, fn, "Invoca (síncrono) con el lote")
+Rel(fn, db, "Guarda cada lectura")
+Rel(fn, topic, "Publica UN aviso si hay lecturas sobre 35 °C")
+Rel(topic, dest, "Envía el email")
+Rel(fn, poller, "Responde sin fallos: el poller borra los mensajes")
+
+SHOW_LEGEND()
+@enduml

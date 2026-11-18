@@ -1,0 +1,43 @@
+@startuml c4-despliegue
+!include <C4/C4_Deployment>
+LAYOUT_TOP_DOWN()
+title EcoByte Agro: despliegue (C4 deployment, entorno dev)
+
+Deployment_Node(laptop, "Laptop del equipo", "WSL2") {
+  Container(sim, "Simulador", "Python + boto3", "Publica lecturas; identidad: solo sqs:SendMessage")
+}
+
+Deployment_Node(gh, "GitHub Actions", "Runner efímero") {
+  Container(pipe, "ci / deploy / destroy", "Pipeline con OpenTofu 1.12.6", "Autenticación OIDC, sin claves de larga duración")
+}
+
+Deployment_Node(aws, "Cuenta AWS", "us-east-1") {
+  Deployment_Node(ing, "Ingesta", "SQS") {
+    ContainerQueue(q, "ecobyte-dev-ingesta", "Cola estándar", "maxReceiveCount = 3")
+    ContainerQueue(dlq, "DLQ", "Cola estándar", "Retención de 14 días")
+  }
+  Deployment_Node(proc, "Procesamiento", "Lambda") {
+    Container(fn, "ecobyte-dev-consumidor", "Python 3.13, 128 MB", "Lotes de 10, concurrencia máxima por variable")
+  }
+  Deployment_Node(dat, "Datos", "DynamoDB") {
+    ContainerDb(db, "ecobyte-dev-lecturas", "Capacidad por demanda", "TTL de 30 días")
+  }
+  Deployment_Node(not, "Notificación", "SNS") {
+    Container(topic, "Tópico de alertas", "Email", "Suscripciones confirmadas a mano")
+  }
+  Deployment_Node(obs, "Observabilidad", "CloudWatch") {
+    Container(mon, "Dashboard y alarma de la DLQ", "CloudWatch", "Logs con retención de 7 días")
+  }
+}
+
+Rel(sim, q, "Publica lecturas", "HTTPS")
+Rel(q, fn, "Event source mapping")
+Rel(q, dlq, "Tras 3 recepciones fallidas")
+Rel(fn, db, "put_item")
+Rel(fn, topic, "publish")
+Rel(mon, dlq, "Vigila mensajes visibles")
+Rel(mon, topic, "Acción de la alarma")
+Rel(pipe, aws, "Crea y destruye la infraestructura", "Rol de despliegue vía OIDC")
+
+SHOW_LEGEND()
+@enduml
