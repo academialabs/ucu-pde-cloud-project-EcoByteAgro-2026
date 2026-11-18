@@ -1,3 +1,4 @@
+# Salidas del módulo messaging.
 output "ingest_queue_url" {
   description = "URL de la cola de ingesta; la usa el simulador para enviar lecturas"
   value       = aws_sqs_queue.ingest.url

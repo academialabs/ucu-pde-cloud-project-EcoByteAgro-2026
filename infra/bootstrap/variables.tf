@@ -1,3 +1,4 @@
+# Variables del bootstrap: entorno, límite del presupuesto y repos que pueden desplegar.
 variable "env" {
   description = "Nombre del entorno, usado en la etiqueta env"
   type        = string

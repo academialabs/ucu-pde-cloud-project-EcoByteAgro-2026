@@ -1,3 +1,4 @@
+# Estado remoto del entorno dev en S3, con bloqueo.
 terraform {
   backend "s3" {
     bucket       = "ecobyte-agro-tfstate-852382801813"

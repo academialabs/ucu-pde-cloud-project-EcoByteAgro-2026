@@ -1,3 +1,4 @@
+# Salidas del módulo database.
 output "table_name" {
   description = "Nombre de la tabla de lecturas; la Lambda lo recibe como variable de entorno"
   value       = aws_dynamodb_table.readings.name
