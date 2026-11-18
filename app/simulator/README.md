@@ -52,4 +52,27 @@ Los mensajes se envían en lotes de 10 (`SendMessageBatch`), el máximo de SQS: 
 
 ## Credenciales
 
-Usa la sesión de `aws login` o el perfil que se pase con `--profile`. El simulador solo necesita `sqs:SendMessage` sobre la cola de ingesta; `SendMessageBatch` usa ese mismo permiso. Nunca se crean access keys.
+El simulador solo necesita `sqs:SendMessage` sobre la cola de ingesta; `SendMessageBatch` usa ese mismo permiso. Para no correrlo con los permisos del usuario de cada integrante, el entorno crea el rol `ecobyte-dev-simulador`, que solo puede hacer eso. Nunca se crean access keys.
+
+Una vez, después del deploy, se agrega un perfil que asume ese rol a partir de la sesión de `aws login`:
+
+```bash
+aws configure set role_arn "$(tofu -chdir=infra/envs/dev output -raw simulator_role_arn)" --profile ecobyte-simulador
+aws configure set source_profile default --profile ecobyte-simulador
+aws configure set region us-east-1 --profile ecobyte-simulador
+```
+
+Y se corre con ese perfil:
+
+```bash
+.venv/bin/python app/simulator/simulator.py --profile ecobyte-simulador --count 50 --rate 10
+```
+
+Para comprobar el menor privilegio, el mismo perfil no puede leer la cola:
+
+```bash
+aws sqs receive-message --queue-url "$QUEUE_URL" --profile ecobyte-simulador
+# AccessDenied: el rol solo tiene sqs:SendMessage
+```
+
+El rol confía en la cuenta: lo puede asumir un usuario de la cuenta que tenga permiso de `sts:AssumeRole`, y nadie de afuera. Sin `--profile`, el simulador usa la sesión de `aws login`.

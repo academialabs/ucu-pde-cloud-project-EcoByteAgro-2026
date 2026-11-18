@@ -43,3 +43,44 @@ resource "aws_sns_topic_subscription" "email" {
   protocol  = "email"
   endpoint  = var.alert_emails[count.index]
 }
+
+# ---------------------------------------------------------------------------
+# Identidad del simulador: solo puede enviar mensajes a la cola de ingesta.
+# El simulador corre en la laptop con un perfil que asume este rol, así no usa
+# los permisos del usuario de cada integrante. SendMessageBatch usa el mismo permiso.
+# ---------------------------------------------------------------------------
+data "aws_caller_identity" "current" {}
+
+# La confianza es la cuenta: solo los usuarios de la cuenta con permiso de sts:AssumeRole
+# sobre este rol pueden asumirlo. Nadie de afuera de la cuenta.
+data "aws_iam_policy_document" "simulator_trust" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+}
+
+resource "aws_iam_role" "simulator" {
+  name               = "${var.name_prefix}-simulador"
+  description        = "Simulador de sensores: solo envía mensajes a la cola de ingesta"
+  assume_role_policy = data.aws_iam_policy_document.simulator_trust.json
+}
+
+# Las colas usan cifrado gestionado por SQS (SSE-SQS), que no pide permisos de KMS.
+data "aws_iam_policy_document" "simulator" {
+  statement {
+    sid       = "SendReadings"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.ingest.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "simulator" {
+  name   = "simulador-solo-envia"
+  role   = aws_iam_role.simulator.id
+  policy = data.aws_iam_policy_document.simulator.json
+}

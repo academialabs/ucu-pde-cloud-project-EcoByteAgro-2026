@@ -27,3 +27,8 @@ output "dlq_alarm_arn" {
   description = "ARN de la alarma para la DLQ"
   value       = module.monitoring.dlq_alarm_arn
 }
+
+output "simulator_role_arn" {
+  description = "Rol que asume el simulador con --profile; solo puede enviar a la cola de ingesta"
+  value       = module.messaging.simulator_role_arn
+}
