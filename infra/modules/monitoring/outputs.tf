@@ -1,3 +1,4 @@
+# Salidas del módulo monitoring.
 output "dashboard_name" {
   description = "Nombre del dashboard de CloudWatch, para buscarlo en la consola"
   value       = aws_cloudwatch_dashboard.pipeline.dashboard_name

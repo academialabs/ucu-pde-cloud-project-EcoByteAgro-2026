@@ -1,3 +1,4 @@
+# Versiones fijadas, región y etiquetas comunes del entorno dev.
 terraform {
   required_version = "= 1.12.6"
 

@@ -1,0 +1,39 @@
+@startuml c4-dinamico-cicd
+!include <C4/C4_Dynamic>
+LAYOUT_TOP_DOWN()
+title EcoByte Agro: flujo de CI/CD, del PR al despliegue (C4 dinámico)
+
+Person(dev, "Integrante del equipo", "Abre PRs y aprueba despliegues")
+
+System_Ext(gh, "GitHub", "Repositorio, PRs, ruleset de master y environment dev")
+
+System_Boundary(gha, "GitHub Actions (runners efímeros)") {
+  Container(ci, "ci.yml / checks", "OpenTofu 1.12.6, tflint, Trivy", "fmt, validate, tflint y trivy config; sin credenciales")
+  Container(plan, "ci.yml / plan", "OpenTofu", "Plan con rol de solo lectura; lo comenta en el PR")
+  Container(deploy, "deploy.yml / destroy.yml", "OpenTofu", "workflow_dispatch + aprobación manual; concurrency deploy-dev")
+}
+
+System_Ext(oidc, "GitHub OIDC", "Emite un token por corrida (sub = pull_request o environment:dev)")
+
+System_Boundary(aws, "Cuenta AWS (us-east-1)") {
+  Container(sts, "IAM / STS", "AssumeRoleWithWebIdentity", "Roles ecobyte-github-plan (lectura) y de despliegue")
+  ContainerDb(state, "Bucket de estado", "S3, use_lockfile", "Estado remoto con bloqueo")
+  Container(infra, "Infraestructura de dev", "SQS, Lambda, DynamoDB, SNS, CloudWatch", "Se crea y se destruye por sesión de trabajo")
+}
+
+Rel(dev, gh, "1. Abre un PR hacia master")
+Rel(gh, ci, "2. Dispara el workflow ci", "pull_request")
+Rel(ci, plan, "3. Si los checks pasan, corre plan")
+Rel(plan, oidc, "4. Pide token (sub = pull_request)")
+Rel(plan, sts, "5. Asume el rol de solo lectura")
+Rel(plan, state, "6. Lee el estado y calcula el plan")
+Rel(plan, gh, "7. Comenta el plan en el PR")
+Rel(dev, gh, "8. Revisa, aprueba y hace merge")
+Rel(dev, deploy, "9. Lanza deploy o destroy a mano", "workflow_dispatch")
+Rel(deploy, gh, "10. Espera la aprobación del environment dev")
+Rel(deploy, sts, "11. Asume el rol de despliegue", "OIDC, sub = environment:dev")
+Rel(deploy, infra, "12. tofu plan -out y apply del mismo archivo (o destroy)")
+Rel(deploy, state, "13. Escribe el estado con bloqueo")
+
+SHOW_LEGEND()
+@enduml

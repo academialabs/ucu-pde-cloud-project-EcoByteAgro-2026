@@ -1,3 +1,4 @@
+# Acceso de GitHub Actions por OIDC: rol de plan (solo lectura) y rol de deploy (recursos ecobyte-*).
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
@@ -5,25 +6,17 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
   region     = data.aws_region.current.region
 
-  # Mismo bucket que usa el backend. El nombre lleva el ID de cuenta, por eso se arma acá.
   state_bucket_arn = "arn:aws:s3:::ecobyte-agro-tfstate-${local.account_id}"
 
-  # Prefijo de todo lo que crea el entorno, para acotar permisos por ARN.
   arn_prefix = "arn:aws:%s:${local.region}:${local.account_id}"
   oidc_host  = "token.actions.githubusercontent.com"
 }
 
-# GitHub como proveedor de identidad: AWS acepta los tokens que firma GitHub.
-# Hay uno solo por cuenta.
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://${local.oidc_host}"
   client_id_list = ["sts.amazonaws.com"]
 }
 
-# ---------------------------------------------------------------------------
-# Rol de plan: solo lectura. Lo asumen los pull requests.
-# Un PR puede traer un workflow modificado, así que lo que corre ahí no escribe.
-# ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "github_plan_trust" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -42,7 +35,7 @@ data "aws_iam_policy_document" "github_plan_trust" {
     condition {
       test     = "StringEquals"
       variable = "${local.oidc_host}:sub"
-      values   = ["${var.github_sub_prefix}:pull_request"]
+      values   = [for p in var.github_sub_prefixes : "${p}:pull_request"]
     }
   }
 }
@@ -53,8 +46,6 @@ resource "aws_iam_role" "github_plan" {
   assume_role_policy = data.aws_iam_policy_document.github_plan_trust.json
 }
 
-# Lecturas que hace tofu plan al refrescar el estado. Muchas acciones de lectura no
-# admiten restringir por recurso, por eso van sobre "*". Se ajusta cuando existan los módulos.
 data "aws_iam_policy_document" "read" {
   statement {
     sid = "ReadServices"
@@ -78,9 +69,6 @@ data "aws_iam_policy_document" "read" {
     resources = ["*"]
   }
 
-  # Correos de las alertas (SecureString creado a mano). envs/dev lo lee con un data source,
-  # así que lo necesitan tanto plan como deploy. Solo ese parámetro, no todo SSM. El descifrado
-  # no pide kms:Decrypt aparte: la clave gestionada alias/aws/ssm lo permite a la cuenta vía SSM.
   statement {
     sid       = "ReadAlertEmails"
     actions   = ["ssm:GetParameter"]
@@ -91,7 +79,6 @@ data "aws_iam_policy_document" "read" {
 data "aws_iam_policy_document" "github_plan" {
   source_policy_documents = [data.aws_iam_policy_document.read.json]
 
-  # Estado de los entornos: lectura, más el archivo de bloqueo (use_lockfile) que tofu plan escribe.
   statement {
     sid       = "StateRead"
     actions   = ["s3:GetObject"]
@@ -123,10 +110,6 @@ resource "aws_iam_role_policy" "github_plan" {
   policy = data.aws_iam_policy_document.github_plan.json
 }
 
-# ---------------------------------------------------------------------------
-# Rol de despliegue: crea y destruye los recursos ecobyte-*. Lo asume solo el
-# environment de GitHub (con aprobación manual), tanto para apply como para destroy.
-# ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "github_deploy_trust" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -142,11 +125,10 @@ data "aws_iam_policy_document" "github_deploy_trust" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Un job con "environment:" lleva este sub y no el de la rama.
     condition {
       test     = "StringEquals"
       variable = "${local.oidc_host}:sub"
-      values   = ["${var.github_sub_prefix}:environment:${var.github_environment}"]
+      values   = [for p in var.github_sub_prefixes : "${p}:environment:${var.github_environment}"]
     }
   }
 }
@@ -199,7 +181,6 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = [format("${local.arn_prefix}:function:ecobyte-*", "lambda")]
   }
 
-  # El vínculo cola-Lambda tiene un ID aleatorio, no se puede acotar por nombre.
   statement {
     sid = "ManageEventSourceMappings"
     actions = [
@@ -210,8 +191,6 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = ["*"]
   }
 
-  # El vínculo lleva las etiquetas de default_tags, y AWS pide permiso para etiquetarlo al
-  # crearlo. Su ARN tiene un ID aleatorio: se acota al tipo de recurso, no al nombre.
   statement {
     sid       = "TagEventSourceMappings"
     actions   = ["lambda:TagResource", "lambda:UntagResource"]
@@ -258,7 +237,6 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = ["arn:aws:iam::${local.account_id}:role/ecobyte-*"]
   }
 
-  # Solo políticas propias: impide adjuntar una administrada como AdministratorAccess.
   statement {
     sid       = "AttachEcobytePolicies"
     actions   = ["iam:AttachRolePolicy", "iam:DetachRolePolicy"]
@@ -296,8 +274,6 @@ data "aws_iam_policy_document" "github_deploy" {
     }
   }
 
-  # Los roles de este archivo también empiezan con ecobyte-: sin esto el rol de despliegue
-  # podría cambiar sus propios permisos o los del rol de plan.
   statement {
     sid       = "ProtectGithubRoles"
     effect    = "Deny"

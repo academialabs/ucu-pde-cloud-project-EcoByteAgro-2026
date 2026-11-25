@@ -1,3 +1,4 @@
+# Salidas del módulo messaging.
 output "ingest_queue_url" {
   description = "URL de la cola de ingesta; la usa el simulador para enviar lecturas"
   value       = aws_sqs_queue.ingest.url
@@ -26,4 +27,9 @@ output "dlq_name" {
 output "alerts_topic_arn" {
   description = "ARN del tópico SNS de alertas"
   value       = aws_sns_topic.alerts.arn
+}
+
+output "simulator_role_arn" {
+  description = "ARN del rol del simulador (solo sqs:SendMessage sobre la cola de ingesta)"
+  value       = aws_iam_role.simulator.arn
 }

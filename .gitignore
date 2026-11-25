@@ -1,4 +1,4 @@
-# OpenTofu / Terraform
+# Estado, secretos, entornos de Python y archivos generados que no se suben.
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -7,17 +7,17 @@ tfplan
 crash.log
 secret*.tfvars
 
-# Secretos y claves
 .env
 *.pem
 *.key
 
-# Python
 __pycache__/
 .venv/
 *.pyc
 
-# Paquete de la Lambda generado
 *.zip
 
 .claude
+
+out 
+*:Zone.Identifier

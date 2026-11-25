@@ -1,0 +1,25 @@
+@startuml c4-dinamico-fallo
+!include <C4/C4_Dynamic>
+LAYOUT_TOP_DOWN()
+title EcoByte Agro: flujo de fallo, del reintento a la alerta (C4 dinámico)
+
+Person(dest, "Equipo", "Recibe el aviso por email")
+
+ContainerQueue(q, "Cola de ingesta", "Mensajería, entrega al menos una vez", "maxReceiveCount = 3")
+ContainerQueue(dlq, "Cola de mensajes fallidos", "DLQ", "Conserva el cuerpo original del mensaje")
+Container(poller, "Poller / disparador", "Servicio gestionado", "Sondea la cola e invoca la función con el lote")
+Container(fn, "Función consumidora", "Serverless", "Falla al procesar el mensaje")
+Container(topic, "Tópico pub/sub", "Notificaciones", "Alertas de operación")
+Container(mon, "Monitoreo", "Alarma sobre la DLQ", "Se activa con 1 o más mensajes")
+
+Rel(poller, q, "Recibe el mensaje (recepción 1)")
+Rel(poller, fn, "Invoca (síncrono) con el lote")
+Rel(fn, poller, "Devuelve error: el mensaje no se borra")
+Rel(poller, q, "Tras el visibility timeout lo recibe de nuevo (recepciones 2 y 3)")
+Rel(q, dlq, "Al superar maxReceiveCount mueve el mensaje")
+Rel(mon, dlq, "Detecta mensajes visibles")
+Rel(mon, topic, "Dispara la acción de la alarma")
+Rel(topic, dest, "Envía el email")
+
+SHOW_LEGEND()
+@enduml

@@ -1,3 +1,4 @@
+# Salidas del entorno dev que usan el simulador y la demo.
 output "ingest_queue_url" {
   description = "URL de la cola de ingesta; el simulador la recibe por argumento o variable de entorno (tofu output -raw ingest_queue_url)"
   value       = module.messaging.ingest_queue_url
@@ -26,4 +27,9 @@ output "dashboard_name" {
 output "dlq_alarm_arn" {
   description = "ARN de la alarma para la DLQ"
   value       = module.monitoring.dlq_alarm_arn
+}
+
+output "simulator_role_arn" {
+  description = "Rol que asume el simulador con --profile; solo puede enviar a la cola de ingesta"
+  value       = module.messaging.simulator_role_arn
 }

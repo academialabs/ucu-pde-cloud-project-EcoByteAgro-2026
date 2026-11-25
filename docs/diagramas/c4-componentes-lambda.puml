@@ -1,0 +1,28 @@
+@startuml c4-componentes-lambda
+!include <C4/C4_Component>
+LAYOUT_TOP_DOWN()
+title EcoByte Agro: componentes de la función consumidora (C4 nivel 3)
+
+ContainerQueue(poller, "Poller / disparador", "Event source mapping", "Entrega el lote (hasta 10 mensajes) y borra o devuelve según la respuesta")
+ContainerDb(db, "Base NoSQL", "DynamoDB", "Clave sensor_id + timestamp, TTL en expires_at")
+Container(topic, "Tópico pub/sub", "SNS", "Alertas por email")
+Container(logs, "Registro", "CloudWatch Logs", "Retención de 7 días")
+
+Container_Boundary(fn, "Función consumidora (Lambda, Python)") {
+  Component(handler, "handler", "Coordinador del lote", "Recorre el lote, junta las lecturas sobre el umbral y arma batchItemFailures")
+  Component(parse, "parse_reading", "Validación", "Exige sensor_id texto, timestamp entero en ms y temperature numérica y finita")
+  Component(save, "save_reading", "Escritura", "put_item con expires_at = timestamp + 30 días; reintentar es idempotente")
+  Component(alert, "publish_alert", "Aviso", "Un solo mensaje por lote con todas las lecturas sobre el umbral")
+}
+
+Rel(poller, handler, "Invoca (síncrono) con el lote")
+Rel(handler, parse, "Valida cada mensaje")
+Rel(handler, save, "Guarda cada lectura válida")
+Rel(handler, alert, "Si hay lecturas > umbral (estricto)")
+Rel(save, db, "put_item")
+Rel(alert, topic, "publish")
+Rel(handler, logs, "Registra mensajes inválidos y fallos con messageId")
+Rel(handler, poller, "Devuelve batchItemFailures: solo esos mensajes se reintentan")
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,19 @@
+@startuml c4-contexto
+!include <C4/C4_Context>
+LAYOUT_TOP_DOWN()
+title EcoByte Agro: contexto del sistema (C4 nivel 1)
+
+Person(equipo, "Equipo", "Lanza la simulación de sensores y opera el sistema")
+Person(usuarios, "Usuarios", "Reciben alertas por email cuando la temperatura supera 35 °C")
+
+System(ecobyte, "EcoByte Agro", "Recibe lecturas de temperatura, las guarda 30 días y avisa por email si superan el umbral")
+
+System_Ext(sensores, "Sensores de cultivo", "En este proyecto los reemplaza un simulador local que publica lecturas")
+
+Rel(equipo, sensores, "Ejecuta la simulación")
+Rel(sensores, ecobyte, "Publica lecturas", "{sensor_id, timestamp, temperature}")
+Rel(ecobyte, usuarios, "Envía alertas", "Email")
+Rel(ecobyte, equipo, "Muestra métricas y avisa de fallos", "Dashboard, alarma")
+
+SHOW_LEGEND()
+@enduml

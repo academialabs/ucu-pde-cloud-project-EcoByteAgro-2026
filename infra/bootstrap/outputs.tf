@@ -1,3 +1,4 @@
+# Salidas del bootstrap: presupuesto y ARN de los roles de GitHub.
 output "budget_name" {
   description = "Nombre del presupuesto mensual"
   value       = aws_budgets_budget.monthly.name
